@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>돈까스 갤러그</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #000; overflow: hidden;
+            font-family: 'sans-serif'; touch-action: none;
+        }
+        #game-container {
+            position: relative; width: 100vw; height: 100vh;
+            max-width: 500px; margin: 0 auto; background-color: #111;
+            overflow: hidden;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        .panel {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; z-index: 10;
+        }
+        .hidden { display: none !important; }
+        
+        #start-panel { background-color: rgba(0,0,0,0.8); }
+        #game-over-panel { background-color: rgba(0,0,0,0.8); }
+        
+        h2 { text-align: center; margin-bottom: 20px; font-size: 24px; text-shadow: 2px 2px 4px #000; }
+        button.action-btn {
+            padding: 15px 30px; font-size: 18px; font-weight: bold;
+            background-color: #ff9800; color: white; border: none;
+            border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        
+        #score-display {
+            position: absolute; top: 15px; left: 15px;
+            color: white; font-size: 20px; font-weight: bold; z-index: 5;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #controls {
+            position: absolute; bottom: 30px; left: 0; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 20px;
+            box-sizing: border-box; z-index: 5;
+        }
+        .control-btn {
+            width: 70px; height: 70px; background-color: rgba(255,255,255,0.3);
+            border: 2px solid white; border-radius: 50%; color: white;
+            font-size: 30px; display: flex; justify-content: center; align-items: center;
+            user-select: none; -webkit-user-select: none;
+        }
+        .control-btn:active { background-color: rgba(255,255,255,0.6); }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="score-display" class="hidden">Score: 0</div>
+
+    <div id="controls" class="hidden">
+        <div id="btn-left" class="control-btn">◀</div>
+        <div id="btn-right" class="control-btn">▶</div>
+    </div>
+
+    <div id="start-panel" class="panel">
+        <h2>돈까스 획득에<br>도전하겠습니까?</h2>
+        <button id="btn-start" class="action-btn">게임 시작</button>
+    </div>
+
+    <div id="game-over-panel" class="panel hidden">
+        <h2>돈까스를 획득하는 데<br>실패하였습니다.</h2>
+        <button id="btn-restart" class="action-btn">다시 도전?</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const startPanel = document.getElementById('start-panel');
+    const gameOverPanel = document.getElementById('game-over-panel');
+    const scoreDisplay = document.getElementById('score-display');
+    const controls = document.getElementById('controls');
+    
+    let isGameActive = false;
+    let score = 0;
+    let animationId;
+    let frameCount = 0;
+
+    function resizeCanvas() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // ==========================================
+    // 리소스(이미지 & 오디오) 로드 영역
+    // ==========================================
+    
+    // 이미지 객체 생성
+    const bgImg = new Image(); bgImg.src = 'image/bg.png'; // 배경 이미지
+    const imgIdle = new Image(); imgIdle.src = 'image/idle.png'; // 대기 이미지
+    const imgMove = new Image(); imgMove.src = 'image/move.png'; // 이동 이미지
+    const imgAttack = new Image(); imgAttack.src = 'image/attack.png'; // 공격 이미지
+    const imgDead = new Image(); imgDead.src = 'image/dead.png'; // 사망 이미지
+    const imgEnemy = new Image(); imgEnemy.src = 'image/enemy.png'; // 적(돈까스) 이미지
+
+    // 오디오 객체 생성
+    const bgm = new Audio('image/bgm.mp3'); bgm.loop = true; // 배경음악 (반복)
+    const hitSound = new Audio('image/hit.mp3'); // 피격 효과음
+    const moveSound = new Audio('image/move.mp3'); // 이동 효과음
+    const gameOverSound = new Audio('image/gameover.mp3'); // 게임오버 효과음
+
+    // 효과음 재생 함수 (연속 재생을 위해 currentTime 초기화)
+    function playSound(audio) {
+        audio.currentTime = 0;
+        audio.play().catch(e => console.log("Audio play error:", e));
+    }
+
+    // ==========================================
+    // 게임 오브젝트 정의
+    // ==========================================
+
+    let enemies = [];
+    let bullets = [];
+
+    const player = {
+        x: canvas.width / 2,
+        y: canvas.height - 150,
+        width: 60,  // 캐릭터 너비
+        height: 60, // 캐릭터 높이
+        speed: 5,
+        moveDir: 0, 
+        state: 'idle',
+        attackTimer: 0,
+
+        draw() {
+            let currentImg = imgIdle;
+            if (this.state === 'move') currentImg = imgMove;
+            else if (this.state === 'attack') currentImg = imgAttack;
+            else if (this.state === 'dead') currentImg = imgDead;
+
+            // 이미지가 중심을 기준으로 그려지도록 좌표 보정
+            if (currentImg.complete) {
+                ctx.drawImage(currentImg, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+            }
+        },
+
+        update() {
+            if (!isGameActive) return;
+
+            this.x += this.moveDir * this.speed;
+            
+            if (this.x < this.width/2) this.x = this.width/2;
+            if (this.x > canvas.width - this.width/2) this.x = canvas.width - this.width/2;
+
+            if (this.state === 'attack') {
+                this.attackTimer--;
+                if (this.attackTimer <= 0) {
+                    this.state = this.moveDir !== 0 ? 'move' : 'idle';
+                }
+            } else if (this.state !== 'dead') {
+                this.state = this.moveDir !== 0 ? 'move' : 'idle';
+            }
+        },
+
+        attack() {
+            if (!isGameActive || this.state === 'dead') return;
+            this.state = 'attack';
+            this.attackTimer = 15; 
+            bullets.push({
+                x: this.x,
+                y: this.y - this.height/2,
+                speed: 10,
+                radius: 5
+            });
+        }
+    };
+
+    // ==========================================
+    // 게임 루프 및 주요 로직
+    // ==========================================
+
+    function gameLoop() {
+        if (!isGameActive) return;
+
+        // 1. 배경 그리기
+        if (bgImg.complete) {
+            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // 2. 플레이어 업데이트 및 그리기
+        player.update();
+        player.draw();
+
+        // 3. 자동 공격
+        frameCount++;
+        if (frameCount % 45 === 0) {
+            player.attack();
+        }
+
+        // 4. 총알 처리
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i];
+            b.y -= b.speed;
+            
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffeb3b';
+            ctx.fill();
+
+            if (b.y < 0) bullets.splice(i, 1);
+        }
+
+        // 5. 적 스폰
+        if (Math.random() < 0.03) {
+            enemies.push({
+                x: Math.random() * (canvas.width - 60) + 30,
+                y: -40,
+                speed: 3 + Math.random() * 2,
+                width: 50,
+                height: 50,
+                seed: Math.random() * 100
+            });
+        }
+
+        // 6. 적 업데이트 및 충돌 처리
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            
+            if (score >= 100) {
+                e.x += Math.sin(frameCount * 0.2 + e.seed) * 8; 
+                if (e.x < e.width/2) e.x = e.width/2;
+                if (e.x > canvas.width - e.width/2) e.x = canvas.width - e.width/2;
+            }
+
+            e.y += e.speed;
+
+            if (imgEnemy.complete) {
+                ctx.drawImage(imgEnemy, e.x - e.width/2, e.y - e.height/2, e.width, e.height);
+            }
+
+            // 플레이어와 충돌 (게임 오버)
+            let distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
+            if (distToPlayer < (player.height/2 + e.height/2 - 10)) { // 충돌 판정 살짝 보정
+                gameOver();
+                return; 
+            }
+
+            // 총알과 충돌 (점수 획득)
+            for (let j = bullets.length - 1; j >= 0; j--) {
+                let b = bullets[j];
+                let distToBullet = Math.hypot(b.x - e.x, b.y - e.y);
+                
+                if (distToBullet < e.height/2 + b.radius) {
+                    score += 10;
+                    updateScoreUI();
+                    playSound(hitSound); // 피격 효과음 재생
+                    enemies.splice(i, 1);
+                    bullets.splice(j, 1);
+                    break;
+                }
+            }
+
+            if (e && e.y > canvas.height + 50) {
+                enemies.splice(i, 1);
+            }
+        }
+
+        animationId = requestAnimationFrame(gameLoop);
+    }
+
+    // ==========================================
+    // 게임 제어 함수
+    // ==========================================
+
+    function startGame() {
+        score = 0;
+        updateScoreUI();
+        enemies = [];
+        bullets = [];
+        frameCount = 0;
+        
+        player.x = canvas.width / 2;
+        player.state = 'idle';
+        player.moveDir = 0;
+
+        startPanel.classList.add('hidden');
+        gameOverPanel.classList.add('hidden');
+        scoreDisplay.classList.remove('hidden');
+        controls.classList.remove('hidden');
+
+        // BGM 재생
+        bgm.currentTime = 0;
+        bgm.play().catch(e => console.log("BGM play error:", e));
+
+        isGameActive = true;
+        gameLoop();
+    }
+
+    function gameOver() {
+        isGameActive = false;
+        cancelAnimationFrame(animationId);
+        
+        player.state = 'dead';
+        
+        // 사망 상태 렌더링
+        if (bgImg.complete) ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+        player.draw(); 
+
+        // BGM 정지 및 게임오버 사운드 재생
+        bgm.pause();
+        playSound(gameOverSound);
+
+        scoreDisplay.classList.add('hidden');
+        controls.classList.add('hidden');
+        gameOverPanel.classList.remove('hidden');
+    }
+
+    function updateScoreUI() {
+        scoreDisplay.innerText = `Score: ${score}`;
+    }
+
+    // 버튼 이벤트
+    document.getElementById('btn-start').addEventListener('click', startGame);
+    document.getElementById('btn-restart').addEventListener('click', startGame);
+
+    // 이동 컨트롤
+    const btnLeft = document.getElementById('btn-left');
+    const btnRight = document.getElementById('btn-right');
+
+    const handleMove = (dir) => {
+        if (player.moveDir !== dir) {
+            playSound(moveSound); // 방향을 바꿀 때 이동음 재생
+        }
+        player.moveDir = dir;
+    };
+
+    const moveLeft = (e) => { e.preventDefault(); handleMove(-1); };
+    const moveRight = (e) => { e.preventDefault(); handleMove(1); };
+    const stopMove = (e) => { e.preventDefault(); player.moveDir = 0; };
+
+    // 터치 (모바일)
+    btnLeft.addEventListener('touchstart', moveLeft);
+    btnLeft.addEventListener('touchend', stopMove);
+    btnRight.addEventListener('touchstart', moveRight);
+    btnRight.addEventListener('touchend', stopMove);
+
+    // 마우스 (PC 테스트용)
+    btnLeft.addEventListener('mousedown', moveLeft);
+    btnLeft.addEventListener('mouseup', stopMove);
+    btnLeft.addEventListener('mouseleave', stopMove);
+    btnRight.addEventListener('mousedown', moveRight);
+    btnRight.addEventListener('mouseup', stopMove);
+    btnRight.addEventListener('mouseleave', stopMove);
+
+</script>
+</body>
+</html>
