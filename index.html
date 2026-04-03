@@ -131,8 +131,8 @@
     const player = {
         x: canvas.width / 2,
         y: canvas.height - 150,
-        width: 60,  // 캐릭터 너비
-        height: 60, // 캐릭터 높이
+        width: 180,  // 캐릭터 너비
+        height: 180, // 캐릭터 높이
         speed: 5,
         moveDir: 0, 
         state: 'idle',
@@ -176,7 +176,7 @@
                 x: this.x,
                 y: this.y - this.height/2,
                 speed: 10,
-                radius: 5
+                radius: 7.5 // 투사체 크기
             });
         }
     };
@@ -248,7 +248,7 @@
 
             // 플레이어와 충돌 (게임 오버)
             let distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
-            if (distToPlayer < (player.height/2 + e.height/2 - 10)) { // 충돌 판정 살짝 보정
+            if (distToPlayer < (player.height/2 + e.height/2 - 10)) { 
                 gameOver();
                 return; 
             }
@@ -331,12 +331,13 @@
     document.getElementById('btn-start').addEventListener('click', startGame);
     document.getElementById('btn-restart').addEventListener('click', startGame);
 
-    // 이동 컨트롤
+    // 이동 컨트롤 로직
     const btnLeft = document.getElementById('btn-left');
     const btnRight = document.getElementById('btn-right');
 
     const handleMove = (dir) => {
-        if (player.moveDir !== dir) {
+        if (!isGameActive) return;
+        if (player.moveDir !== dir && dir !== 0) {
             playSound(moveSound); // 방향을 바꿀 때 이동음 재생
         }
         player.moveDir = dir;
@@ -344,21 +345,46 @@
 
     const moveLeft = (e) => { e.preventDefault(); handleMove(-1); };
     const moveRight = (e) => { e.preventDefault(); handleMove(1); };
-    const stopMove = (e) => { e.preventDefault(); player.moveDir = 0; };
+    const stopMove = (e) => { e.preventDefault(); handleMove(0); };
 
-    // 터치 (모바일)
+    // ==========================================
+    // 마우스 및 터치 (모바일/PC 공통)
+    // ==========================================
     btnLeft.addEventListener('touchstart', moveLeft);
     btnLeft.addEventListener('touchend', stopMove);
     btnRight.addEventListener('touchstart', moveRight);
     btnRight.addEventListener('touchend', stopMove);
 
-    // 마우스 (PC 테스트용)
     btnLeft.addEventListener('mousedown', moveLeft);
     btnLeft.addEventListener('mouseup', stopMove);
     btnLeft.addEventListener('mouseleave', stopMove);
     btnRight.addEventListener('mousedown', moveRight);
     btnRight.addEventListener('mouseup', stopMove);
     btnRight.addEventListener('mouseleave', stopMove);
+
+    // ==========================================
+    // 키보드 조작 (PC 환경 전용)
+    // ==========================================
+    window.addEventListener('keydown', (e) => {
+        // A키 또는 왼쪽 화살표
+        if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+            handleMove(-1);
+        }
+        // D키 또는 오른쪽 화살표
+        else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+            handleMove(1);
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        // 키를 뗐을 때, 해당 방향으로 이동 중이면 멈춤
+        if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+            if (player.moveDir === -1) handleMove(0);
+        }
+        else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+            if (player.moveDir === 1) handleMove(0);
+        }
+    });
 
 </script>
 </body>
