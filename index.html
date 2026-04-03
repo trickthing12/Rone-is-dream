@@ -106,14 +106,14 @@
     const imgIdle = new Image(); imgIdle.src = '이미지/rone.png'; // 대기 이미지
     const imgMove = new Image(); imgMove.src = '이미지/move.png'; // 이동 이미지
     const imgAttack = new Image(); imgAttack.src = '이미지/attack.png'; // 공격 이미지
-    const imgDead = new Image(); imgDead.src = 'image/dead.png'; // 사망 이미지
+    const imgDead = new Image(); imgDead.src = '이미지/dead.png'; // 사망 이미지
     const imgEnemy = new Image(); imgEnemy.src = '이미지/돈까스.png'; // 적(돈까스) 이미지
 
     // 오디오 객체 생성
-    const bgm = new Audio('image/bgm.mp3'); bgm.loop = true; // 배경음악 (반복)
-    const hitSound = new Audio('image/hit.mp3'); // 피격 효과음
-    const moveSound = new Audio('image/move.mp3'); // 이동 효과음
-    const gameOverSound = new Audio('image/gameover.mp3'); // 게임오버 효과음
+    const bgm = new Audio('이미지/bgm.mp3'); bgm.loop = true; // 배경음악 (반복)
+    const hitSound = new Audio('이미지/hit.mp3'); // 피격 효과음
+    const moveSound = new Audio('이미지/move.mp3'); // 이동 효과음
+    const gameOverSound = new Audio('이미지/gameover.mp3'); // 게임오버 효과음
 
     // 효과음 재생 함수 (연속 재생을 위해 currentTime 초기화)
     function playSound(audio) {
